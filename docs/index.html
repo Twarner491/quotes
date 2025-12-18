@@ -12,8 +12,8 @@
     <!-- Social Cards -->
     <meta property="og:title" content="quote receipt">
     <meta property="og:description" content="Certified Stupid. No refunds. No context.">
-    <meta property="og:image" content="https://receipt.onethreenine.net/static/thumb.png">
-    <meta property="og:url" content="https://receipt.onethreenine.net/">
+    <meta property="og:image" content="static/thumb.png">
+    <meta property="og:url" content="">
     <meta name="twitter:card" content="summary_large_image">
 
     <style>
@@ -534,19 +534,50 @@
         const ledErr = document.getElementById('ledErr');
 
         let currentReceiptEl = null;
+        let isConnected = false;
         
-        // Home Assistant Configuration
-        // IMPORTANT: Create a webhook automation in Home Assistant and use that URL here
-        const HA_WEBHOOK_URL = 'https://admin.onethreenine.net/api/webhook/quote_receipt_print';
+        // ============================================================
+        // CONFIGURATION - Choose your setup mode
+        // ============================================================
+        // MODE A: Local Flask server (default if served from receipt.local)
+        // MODE B: Home Assistant webhook (set your HA URL below)
         
-        let isConnected = true; // Assume connected since we're using HA cloud
+        const LOCAL_PRINTER_URL = 'http://receipt.local:5000';
+        const HA_WEBHOOK_URL = ''; // e.g., 'https://your-ha-instance.com/api/webhook/quote_receipt_print'
+        
+        // Auto-detect mode: if HA_WEBHOOK_URL is set, use it. Otherwise use local Flask.
+        const USE_HOME_ASSISTANT = HA_WEBHOOK_URL.length > 0;
+        const PRINT_ENDPOINT = USE_HOME_ASSISTANT ? HA_WEBHOOK_URL : `${LOCAL_PRINTER_URL}/print`;
+        const STATUS_ENDPOINT = `${LOCAL_PRINTER_URL}/status`;
 
         window.addEventListener('load', () => {
             ledPower.classList.add('on');
-            // With HA webhook, we assume it's always reachable (cloud hosted)
-            ledConn.classList.add('on');
+            if (USE_HOME_ASSISTANT) {
+                // HA mode: assume always connected (cloud hosted)
+                isConnected = true;
+                ledConn.classList.add('on');
+            } else {
+                // Local mode: check connection to Flask server
+                checkConnection();
+                setInterval(checkConnection, 10000);
+            }
             spawnNewReceipt();
         });
+
+        async function checkConnection() {
+            try {
+                const res = await fetch(STATUS_ENDPOINT, { method: 'GET', mode: 'cors' });
+                if (res.ok) {
+                    isConnected = true;
+                    ledConn.classList.add('on');
+                } else {
+                    throw new Error('Status not OK');
+                }
+            } catch (e) {
+                isConnected = false;
+                ledConn.classList.remove('on');
+            }
+        }
 
         printBtn.addEventListener('click', handlePrint);
         document.addEventListener('keydown', (e) => {
@@ -582,6 +613,15 @@
         async function handlePrint() {
             if(!currentReceiptEl) return;
 
+            // Check connection for local mode
+            if (!USE_HOME_ASSISTANT && !isConnected) {
+                await checkConnection();
+                if (!isConnected) {
+                    fail("PRINTER OFFLINE");
+                    return;
+                }
+            }
+
             const quoteInput = currentReceiptEl.querySelector('.quoteInput');
             const authorInput = currentReceiptEl.querySelector('.authorInput');
             const quote = quoteInput.value.trim();
@@ -600,18 +640,22 @@
             ledConn.classList.add('blink');
 
             try {
-                const res = await fetch(HA_WEBHOOK_URL, {
+                const res = await fetch(PRINT_ENDPOINT, {
                     method: 'POST',
                     mode: 'cors',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ quote, author })
                 });
                 
-                // HA webhooks return 200 OK if received, actual print happens async via MQTT
-                if (res.ok) {
-                    success();
+                if (USE_HOME_ASSISTANT) {
+                    // HA webhooks return 200 OK, print happens async via MQTT
+                    if (res.ok) success();
+                    else fail("HA Error: " + res.status);
                 } else {
-                    fail("HA API Error: " + res.status);
+                    // Local Flask returns JSON response
+                    const data = await res.json();
+                    if (data.success) success();
+                    else fail(data.error);
                 }
             } catch (err) {
                 console.warn("Print error", err);
@@ -619,7 +663,7 @@
             } finally {
                 printer.classList.remove('printing');
                 ledConn.classList.remove('blink');
-                ledConn.classList.add('on');
+                if (isConnected) ledConn.classList.add('on');
             }
         }
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=Quote Receipt Printer (Flask)
+After=network-online.target avahi-daemon.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/quotes
+ExecStart=/usr/bin/python3 /home/pi/quotes/src/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

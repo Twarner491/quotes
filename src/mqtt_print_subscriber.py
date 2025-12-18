@@ -62,7 +62,7 @@ def print_quote(quote, author="Anonymous"):
         p.text("Memories printed. Dignity sold.\n\n")
 
         # QR code (optional)
-        p.qr("https://receipt.onethreenine.net", size=6, center=True)
+        p.qr("https://github.com/Twarner491/quotes", size=6, center=True)
         p.text("\n")
 
         # Cut

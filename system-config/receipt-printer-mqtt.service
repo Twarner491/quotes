@@ -1,15 +1,12 @@
 [Unit]
-Description=Quote Receipt Printer MQTT Subscriber
+Description=Quote Receipt Printer (MQTT)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# UPDATE User with your actual username if different from 'pi'
 User=pi
-# UPDATE WorkingDirectory to where you cloned the repo
 WorkingDirectory=/home/pi/quotes
-# Run the MQTT subscriber script
 ExecStart=/usr/bin/python3 /home/pi/quotes/src/mqtt_print_subscriber.py
 Restart=always
 RestartSec=5

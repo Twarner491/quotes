@@ -1,168 +1,148 @@
-# Quote Receipt Printer
+# Quote Receipts
 
-A thermal receipt printer for capturing quotes, powered by Home Assistant and MQTT.
+*"Did I really say that?" Why yes, you did.*
 
-**Original Project & Tutorial:** [https://teddywarner.org/Projects/Quotes/](https://teddywarner.org/Projects/Quotes/)
+A thermal receipt printer for capturing silly quotes. Full project writeup at [teddywarner.org/Projects/Quotes](https://teddywarner.org/Projects/Quotes/).
 
-## Architecture
+---
 
-```
-┌──────────────────────┐     ┌──────────────────────┐     ┌─────────────┐     ┌─────────────────┐
-│ receipt.onethreenine │────▶│ admin.onethreenine   │────▶│ MQTT Broker │────▶│ Receipt Printer │
-│      .net            │     │ (Home Assistant)     │     │192.168.4.240│     │   (RPi + USB)   │
-│   (GitHub Pages)     │     │    Webhook API       │     │             │     │                 │
-└──────────────────────┘     └──────────────────────┘     └─────────────┘     └─────────────────┘
-         HTTPS                      HTTPS                      MQTT                  USB
-```
+## BOM
 
-## Hardware Requirements
-- Raspberry Pi (tested on Pi 5, but any model with network + USB should work)
-- USB Thermal Receipt Printer (80mm)
-- Power supply for Printer & Pi
-- MQTT Broker (e.g., Mosquitto at 192.168.4.240:1883)
-- Home Assistant instance with external access
+| Qty | Description | Price | Link |
+|-----|-------------|-------|------|
+| 1 | miemieyo Thermal Receipt Printer 80mm | $65.99 | [Amazon](https://www.amazon.com/dp/B0DFB82NPF) |
+| 1 | MPRT 5 Rolls Thermal Paper 3-1/8" x 230' | $15.99 | [Amazon](https://www.amazon.com/dp/B0D14DYMHQ) |
+| 1 | LM2596 Buck Converter | $7.99 | [Amazon](https://www.amazon.com/dp/B0DBVYP91F) |
+| 1 | Raspberry Pi (any model) | ~$35-80 | [Raspberry Pi](https://www.raspberrypi.com/products/) |
 
-## Installation Guide
+---
 
-### 1. System Setup
-Flash Raspberry Pi OS Lite (64-bit) and configure WiFi.
-SSH into your Pi:
+## 1. Raspberry Pi Setup
+
+Flash Raspberry Pi OS Lite (64-bit) and configure WiFi. SSH in:
+
 ```bash
 ssh pi@raspberrypi.local
+sudo apt update && sudo apt upgrade -y
 ```
 
-Update system and set hostname to `receipt`:
+Set hostname to `receipt`:
+
 ```bash
-sudo apt update && sudo apt upgrade -y
 sudo hostnamectl set-hostname receipt
-sudo nano /etc/hosts  # Point 127.0.1.1 to receipt
+sudo nano /etc/hosts  # Change 127.0.1.1 to receipt
 sudo reboot
 ```
 
-### 2. Install Dependencies
+Install dependencies:
+
 ```bash
-sudo apt install -y python3-pip python3-dev python3-pil libusb-1.0-0-dev avahi-daemon git
+sudo apt install -y python3-pip libusb-1.0-0-dev avahi-daemon
 sudo systemctl enable avahi-daemon
-sudo systemctl start avahi-daemon
 ```
 
-### 3. Project Setup
-Clone this repository:
-```bash
-cd ~
-git clone https://github.com/Twarner491/quotes.git
-cd quotes
-```
+---
 
-Install Python requirements:
+## 2. Clone Repository
+
 ```bash
+git clone https://github.com/Twarner491/quotes.git ~/quotes
+cd ~/quotes
 sudo pip3 install -r requirements.txt --break-system-packages
 ```
 
-### 4. Printer Configuration
-Plug in your printer and find its Vendor and Product IDs:
+---
+
+## 3. Printer Configuration
+
+Find your printer's USB IDs:
+
 ```bash
-lsusb
-# Example output: Bus 001 Device 005: ID 0483:5720
+lsusb                                              # e.g., ID 0483:5720
+lsusb -v -d 0483:5720 | grep "bEndpointAddress"    # e.g., 0x03 OUT, 0x81 IN
 ```
 
-Find the Endpoint Addresses:
-```bash
-lsusb -v -d 0483:5720 | grep -A 5 "bEndpointAddress"
-# Note the OUT endpoint (e.g., 0x03) and IN endpoint (e.g., 0x81)
-```
+Edit `src/app.py` with your values:
 
-**Update `src/mqtt_print_subscriber.py`:**
 ```python
-VENDOR_ID = 0x0483      # Your vendor ID
-PRODUCT_ID = 0x5720     # Your product ID
-OUT_EP = 0x03           # Your OUT endpoint
-IN_EP = 0x81            # Your IN endpoint
+VENDOR_ID = 0x0483
+PRODUCT_ID = 0x5720
+OUT_EP = 0x03
+IN_EP = 0x81
 ```
 
-**Set USB Permissions:**
+Set USB permissions:
+
 ```bash
 sudo cp system-config/99-thermal-printer.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules
-sudo udevadm trigger
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-### 5. MQTT Configuration
-Update the MQTT settings in `src/mqtt_print_subscriber.py`:
-```python
-MQTT_BROKER = "192.168.4.240"
-MQTT_PORT = 1883
-MQTT_TOPIC = "home/receipt_printer/print"
-```
+---
 
-If your MQTT broker requires authentication:
-```python
-MQTT_USERNAME = "your_username"
-MQTT_PASSWORD = "your_password"
-```
+## 4. Local Flask Server
 
-### 6. Home Assistant Setup
-See `system-config/home-assistant-config.md` for detailed instructions.
+Start the service:
 
-Quick summary:
-1. Add the webhook automation to receive print requests
-2. Configure CORS to allow requests from `receipt.onethreenine.net`
-3. Restart Home Assistant
-
-### 7. Auto-Start Service
 ```bash
-sudo cp system-config/receipt-printer.service /etc/systemd/system/
+sudo cp system-config/receipt-printer-flask.service /etc/systemd/system/receipt-printer.service
 sudo systemctl daemon-reload
-sudo systemctl enable receipt-printer.service
-sudo systemctl start receipt-printer.service
+sudo systemctl enable --now receipt-printer.service
 ```
 
-Check status:
+Access at `http://receipt.local:5000`
+
+---
+
+## 5. Home Assistant Integration (Optional)
+
+For external access via Home Assistant webhook → MQTT → Pi.
+
+### Home Assistant Automation
+
+Add to `automations.yaml`:
+
+```yaml
+alias: "Quote Receipt Print"
+trigger:
+  - platform: webhook
+    webhook_id: quote_receipt_print
+    allowed_methods: [POST]
+    local_only: false
+action:
+  - service: mqtt.publish
+    data:
+      topic: "home/receipt_printer/print"
+      payload_template: >
+        {"quote": "{{ trigger.json.quote }}", "author": "{{ trigger.json.author | default('Anonymous') }}"}
+```
+
+### Enable CORS
+
+Add to `configuration.yaml`:
+
+```yaml
+http:
+  cors_allowed_origins:
+    - https://your-frontend-domain.com
+```
+
+### Pi MQTT Setup
+
+Edit `src/mqtt_print_subscriber.py` with your MQTT broker IP and printer IDs, then:
+
 ```bash
-sudo systemctl status receipt-printer.service
+sudo cp system-config/receipt-printer-mqtt.service /etc/systemd/system/receipt-printer.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now receipt-printer.service
 ```
 
-### 8. Hosting the Frontend (GitHub Pages)
-1. Run the build script:
-   ```bash
-   python3 build_static.py
-   ```
-2. Commit and push the `docs/` folder to GitHub.
-3. In GitHub Repository Settings -> Pages:
-   - Source: **Deploy from a branch**
-   - Branch: **main**, Folder: **/docs**
-4. Set custom domain: `receipt.onethreenine.net`
+### Frontend
 
-## Testing
+Edit `src/templates/index.html` and set `HA_WEBHOOK_URL`, then host via GitHub Pages or use `build_static.py`.
 
-### Test MQTT Subscriber Locally
-```bash
-cd ~/quotes
-python3 src/mqtt_print_subscriber.py
-```
+---
 
-### Test Print via MQTT
-```bash
-mosquitto_pub -h 192.168.4.240 -t "home/receipt_printer/print" \
-  -m '{"quote": "Test quote!", "author": "Tester"}'
-```
-
-### Test via Home Assistant Webhook
-```bash
-curl -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"quote": "Hello World", "author": "Test"}' \
-  https://admin.onethreenine.net/api/webhook/quote_receipt_print
-```
-
-## Troubleshooting
-
-- **Printer Error:** Check USB connection and ensure IDs match `lsusb` output.
-- **MQTT Connection Failed:** Verify broker IP/port and firewall rules.
-- **Webhook 404:** Ensure the automation is enabled in Home Assistant.
-- **CORS Error:** Add `receipt.onethreenine.net` to HA's `cors_allowed_origins`.
-- **Permission Denied:**
-  ```bash
-  sudo usermod -a -G lp,dialout $USER
-  sudo reboot
-  ```
+- [Fork this repository](https://github.com/Twarner491/quotes/fork)
+- [Watch this repo](https://github.com/Twarner491/quotes/subscription)
+- [Create issue](https://github.com/Twarner491/quotes/issues/new)

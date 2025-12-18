@@ -47,8 +47,8 @@ def print_quote(quote, author="Anonymous"):
         p.text("No refunds. No context.\n")
         p.text("Memories printed. Dignity sold.\n\n")
 
-        # QR code (optional) - points to the local server
-        p.qr("https://receipt.local", size=6, center=True)
+        # QR code (optional)
+        p.qr("https://github.com/Twarner491/quotes", size=6, center=True)
         p.text("\n")
 
         # Cut
