@@ -624,18 +624,21 @@
         }
 
         function success() {
-            currentReceiptEl.classList.remove('active');
-            currentReceiptEl.classList.add('torn');
+            const oldReceipt = currentReceiptEl; // Save reference BEFORE spawning new one
+            oldReceipt.classList.remove('active');
+            oldReceipt.classList.add('torn');
             
             setTimeout(() => {
                 spawnNewReceipt();
                 printBtn.style.pointerEvents = 'auto';
-                setTimeout(() => {
-                    if(currentReceiptEl.parentNode && currentReceiptEl.classList.contains('torn')) {
-                         currentReceiptEl.parentNode.removeChild(currentReceiptEl);
-                    }
-                }, 1000);
-            }, 1200);
+            }, 800);
+            
+            // Remove old receipt after animation completes
+            setTimeout(() => {
+                if(oldReceipt.parentNode) {
+                    oldReceipt.parentNode.removeChild(oldReceipt);
+                }
+            }, 900);
         }
 
         function fail(msg) {
