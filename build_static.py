@@ -57,5 +57,10 @@ def build_site():
     shutil.copytree('src/static', 'docs/static')
     print("Copied static files to docs/static")
 
+    # Create CNAME file for GitHub Pages
+    with open('docs/CNAME', 'w', encoding='utf-8') as f:
+        f.write('receipt.onethreenine.net')
+    print("Created docs/CNAME")
+
 if __name__ == '__main__':
     build_site()
