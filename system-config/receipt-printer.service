@@ -1,0 +1,19 @@
+[Unit]
+Description=Quote Receipt Printer
+After=network-online.target avahi-daemon.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# UPDATE User with your actual username if different from 'pi'
+User=pi
+# UPDATE WorkingDirectory to where you cloned the repo
+WorkingDirectory=/home/pi/quotes
+# UPDATE ExecStart to point to the app.py location
+ExecStart=/usr/bin/python3 /home/pi/quotes/src/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

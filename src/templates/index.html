@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>quote receipt</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <!-- Social Cards -->
+    <meta property="og:title" content="quote receipt">
+    <meta property="og:description" content="Certified Stupid. No refunds. No context.">
+    <meta property="og:image" content="{{ url_for('static', filename='thumb.png', _external=True) }}">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <style>
+        :root {
+            --printer-black: #222224;
+            --printer-dark: #1a1a1c;
+            --panel-gray: #2a2a2c;
+            --led-power: #ffffff; 
+            --led-conn: #e0e0e0;
+            --led-err: #ff2222;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: #050505;
+            background-image: radial-gradient(circle at 50% 80%, #1a1a1a 0%, #000 100%);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end; 
+            font-family: 'Space Mono', monospace;
+            overflow: hidden;
+            perspective: 1000px;
+        }
+
+        /* --- PRINTER CONTAINER --- */
+        .printer {
+            position: relative;
+            width: 500px;
+            height: 320px;
+            transform: rotateX(15deg) translateY(20px); 
+            transform-style: preserve-3d;
+            z-index: 50;
+            margin-bottom: -40px; 
+        }
+
+        /* 
+           LAYER 1: BACK CHASSIS (Main Body Block)
+           Covers the bottom and back.
+        */
+        .printer-body {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--printer-black);
+            border-radius: 30px 30px 0 0;
+            box-shadow: inset 0 0 50px #000;
+            z-index: 10; 
+        }
+
+        /* 
+           LAYER 2: TOP REAR FACE
+           The part of the top surface BEHIND the paper slot.
+        */
+        .top-rear {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px; /* Depth of rear section */
+            background: linear-gradient(180deg, #333336 0%, #2a2a2c 100%);
+            border-radius: 30px 30px 0 0;
+            z-index: 15;
+            box-shadow: inset 0 5px 10px rgba(255,255,255,0.05);
+        }
+        
+        /* 
+           New: Rear Slot Lip
+           Adds visual depth to the back edge of the slot, matching the front lip width.
+        */
+        .top-rear::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 130px; 
+            right: 30px;
+            height: 12px;
+            background: #08080a;
+            box-shadow: 
+                inset 0 2px 6px rgba(0,0,0,1),
+                0 1px 0 rgba(255,255,255,0.05);
+            border-radius: 2px 2px 0 0;
+            z-index: 16; /* Just above top-rear */
+            border-top: 1px solid #1a1a1c;
+        }
+        /* Serrated Teeth on Rear Lip (For Depth) */
+        .top-rear::before {
+            content: '';
+            position: absolute;
+            bottom: -6px; /* Hangs down slightly into the void */
+            left: 130px;
+            right: 30px;
+            height: 6px;
+            background: 
+                linear-gradient(45deg, transparent 33.333%, #1a1a1c 33.333%, #1a1a1c 66.667%, transparent 66.667%),
+                linear-gradient(-45deg, transparent 33.333%, #1a1a1c 33.333%, #1a1a1c 66.667%, transparent 66.667%);
+            background-size: 8px 12px;
+            z-index: 14;
+            pointer-events: none;
+        }
+
+        /* 
+           LAYER 3: PAPER FEED
+           Sits between Rear Top and Front Top.
+        */
+        .receipt-wrapper {
+            position: absolute;
+            /* 
+               Positioned to emerge right after the rear top section.
+               Rear section is 60px deep.
+               Printer is 320px high.
+               This aligns the paper emergence point.
+            */
+            bottom: 260px; /* 320 - 60 = 260 */
+            left: 140px; 
+            width: calc(100% - 180px);
+            z-index: 20; 
+            perspective: none;
+            transform-style: preserve-3d;
+            display: flex;
+            flex-direction: column-reverse;
+            pointer-events: none;
+        }
+        
+        /* Shadow casting onto the paper as it exits the slot (Stationary) */
+        .receipt-wrapper::after {
+            content: '';
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            /* Dark gradient fading up */
+            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 40%, transparent 100%);
+            z-index: 25; 
+            pointer-events: none;
+            mix-blend-mode: multiply;
+        }
+
+        /* 
+           LAYER 4: TOP FRONT FACE
+           The part of the top surface IN FRONT of the paper slot.
+           Contains the control panel and the slot lip.
+        */
+        .top-front {
+            position: absolute;
+            top: 60px; /* Starts where rear ends */
+            left: 0;
+            width: 100%;
+            height: calc(100% - 60px); /* 260px total height */
+            
+            /* 
+               Top part (140px): Front Panel Gradient 
+               Bottom part (~120px): Base Color (#222224) simulating the chassis
+            */
+            background: linear-gradient(to bottom, 
+                #222224 0%, 
+                #1a1a1c 140px, 
+                #0a0a0c 140px, /* Hard stop for seam */
+                #222224 142px, 
+                #222224 100%
+            );
+            
+            z-index: 30;
+            /* Apply vignette shadow to match printer body */
+            box-shadow: inset 0 0 50px #000;
+        }
+
+        /* The Seam Line/Bevel between Front Panel and Base */
+        .top-front::after {
+            content: '';
+            position: absolute;
+            top: 140px; /* Exactly where the panel ends (140px height) */
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: #000; /* Deep groove shadow */
+            box-shadow: 0 1px 0 rgba(255,255,255,0.08); /* Highlight on top edge of base */
+            z-index: 31;
+        }
+
+
+
+        /* Control Panel Area - Now inside Top Front */
+        .panel-area {
+            position: absolute;
+            top: -60px; /* Extend up to cover the full height visually on the left */
+            left: 25px;
+            width: 80px;
+            height: 200px; /* Covers both rear and front sections visually */
+            background: #28282a;
+            border-right: 1px solid #151515;
+            border-left: 1px solid #333;
+            box-shadow: inset 2px 0 5px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 35px;
+            gap: 20px;
+            z-index: 40; /* On top of everything */
+            border-radius: 4px 0 0 0;
+            
+            /* Ensure clean cut */
+            clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+        }
+
+        /* Slot Housing (The Recessed Indentation) */
+        .slot-housing {
+            position: absolute;
+            top: 0; 
+            left: 130px; 
+            right: 30px;
+            height: 12px; 
+            /* Dark matte background simulating the recessed hole */
+            background: #08080a;
+            border-radius: 0 0 3px 3px;
+            box-shadow: 
+                inset 0 2px 6px rgba(0,0,0,1),
+                0 1px 0 rgba(255,255,255,0.05);
+            z-index: 35;
+            border-bottom: 1px solid #1a1a1c;
+        }
+
+        /* Serrated Teeth on Front Lip (Subtle Razor Edge) */
+        .slot-housing::after {
+            content: '';
+            position: absolute;
+            bottom: -3px; /* Tucked closer to the lip */
+            left: 2px;
+            right: 2px;
+            height: 4px;
+            background: 
+                linear-gradient(45deg, transparent 33.333%, #2a2a2c 33.333%, #2a2a2c 66.667%, transparent 66.667%),
+                linear-gradient(-45deg, transparent 33.333%, #2a2a2c 33.333%, #2a2a2c 66.667%, transparent 66.667%);
+            background-size: 6px 8px; /* Smaller, sharper teeth */
+            z-index: 36;
+            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.8));
+            opacity: 0.9;
+        }
+
+        /* Remove Screws - keep simple */
+        .slot-housing::before {
+            display: none;
+        }
+
+        .center-marker {
+             position: absolute;
+             left: 50%;
+             top: 50%;
+             transform: translate(-50%, -50%);
+             width: 0; 
+             height: 0; 
+             border-left: 4px solid transparent;
+             border-right: 4px solid transparent;
+             border-top: 4px solid rgba(255,255,255,0.15);
+        }
+        .push-lever {
+            position: absolute;
+            top: 0; /* Relative to top-front */
+            left: -8px; 
+            width: 25px; 
+            height: 50px; 
+            background: #444; 
+            transform: skewY(-10deg) translateY(-20px); 
+            border-radius: 4px 0 0 4px; 
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+            z-index: 35;
+        }
+
+        /* LEDs */
+        .led-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            align-items: center;
+        }
+        
+        .led {
+            width: 60%;
+            height: 5px;
+            background: #0a0a0a;
+            border-radius: 3px;
+            position: relative;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.1);
+            overflow: hidden;
+        }
+        
+        .led::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            opacity: 0.15; 
+            background-color: currentColor;
+            border-radius: 2px;
+            transition: opacity 0.2s, box-shadow 0.2s;
+            background-image: linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%); /* Reduced shine */
+        }
+        
+        .led.power { color: var(--led-power); }
+        .led.conn { color: var(--led-conn); }
+        .led.error { color: var(--led-err); }
+
+        .led.on::after { opacity: 0.8; box-shadow: 0 0 5px currentColor, inset 0 0 1px rgba(255,255,255,0.3); background-color: currentColor; } /* Dimmer */
+        .led.blink::after { animation: blink 0.5s infinite alternate; opacity: 0.8; box-shadow: 0 0 8px currentColor; background-color: currentColor; }
+        
+        @keyframes blink { from { opacity: 0.8; } to { opacity: 0.3; } }
+
+        /* Print Button */
+        .feed-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #444 0%, #1a1a1c 100%);
+            border: 2px solid #222;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.1);
+            cursor: pointer;
+            margin-top: auto;
+            margin-bottom: 30px;
+            position: relative;
+            transition: transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .feed-btn:active { transform: scale(0.95); box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .feed-btn.ready { border-color: #666; box-shadow: 0 0 10px rgba(255,255,255,0.1), inset 0 0 10px rgba(77, 255, 136, 0.1); }
+        
+        .icon-print {
+            width: 20px;
+            height: 14px;
+            border: 2px solid #888;
+            border-radius: 2px;
+            position: relative;
+            opacity: 0.6;
+            transition: opacity 0.3s;
+        }
+        .icon-print::before {
+            content: '';
+            position: absolute;
+            top: -4px; left: 4px;
+            width: 8px; height: 4px;
+            background: #888;
+        }
+        .feed-btn.ready .icon-print { opacity: 1; border-color: #fff; }
+        .feed-btn.ready .icon-print::before { background: #fff; }
+
+
+        /* Receipt Style */
+        .receipt {
+            background: #f0f0f0;
+            width: 100%;
+            padding: 20px; 
+            position: relative;
+            transform-origin: bottom center;
+            pointer-events: auto;
+            
+            background-image: url("{{ url_for('static', filename='paper.jpg') }}");
+            background-size: cover;
+            
+            box-shadow: 0 0 15px rgba(0,0,0,0.1), inset 0 0 30px rgba(0,0,0,0.03);
+            
+            transform: translateY(100%); 
+            opacity: 0;
+            transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s;
+            
+            font-family: 'Space Mono', monospace;
+            color: #222;
+            text-shadow: 0 0 1px rgba(0,0,0,0.1);
+        }
+
+        .receipt::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; width: 100%; height: 60px;
+            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.15) 80%, rgba(0,0,0,0.4) 100%);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .receipt::before {
+            content: "";
+            position: absolute;
+            top: -5px; left: 0; width: 100%; height: 6px;
+            background: 
+                linear-gradient(45deg, transparent 33.333%, #f0f0f0 33.333%, #f0f0f0 66.667%, transparent 66.667%),
+                linear-gradient(-45deg, transparent 33.333%, #f0f0f0 33.333%, #f0f0f0 66.667%, transparent 66.667%);
+            background-size: 10px 12px;
+            filter: drop-shadow(0 -1px 1px rgba(0,0,0,0.05));
+        }
+
+        .receipt.active {
+            /* Active state: pushed up out of slot, slight forward bend */
+            animation: print-slide-up 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            opacity: 1;
+        }
+        
+        .receipt.torn {
+            /* Fly OUT upwards */
+            animation: tear-off-fly 1.2s cubic-bezier(0.45, 0, 0.55, 1) forwards;
+        }
+
+        @keyframes print-slide-up {
+            0% { transform: translateY(100%) rotateX(-10deg); }
+            100% { transform: translateY(0) rotateX(-10deg); }
+        }
+
+        @keyframes tear-off-fly {
+            0% { transform: translateY(0) rotateX(-10deg); opacity: 1; }
+            100% { transform: translateY(-120%) rotateZ(-5deg) rotateX(10deg); opacity: 0; }
+        }
+
+        .header { text-align: center; font-weight: 700; font-size: 1.1rem; letter-spacing: 1px; margin-bottom: 10px; }
+        .meta { text-align: center; font-size: 0.75rem; color: #555; margin-bottom: 15px; border-bottom: 1px dashed #aaa; padding-bottom: 10px; }
+        textarea { width: 100%; background: transparent; border: none; font-family: inherit; font-size: 1.1rem; line-height: 1.4; color: #111; resize: none; outline: none; overflow: hidden; min-height: 80px; font-weight: 700; }
+        textarea::placeholder { color: #bbb; font-weight: 400; }
+        .attribution { display: flex; justify-content: flex-end; margin-top: 10px; font-size: 0.9rem; color: #444; }
+        input[type="text"] { background: transparent; border: none; border-bottom: 1px solid #ccc; text-align: right; font-family: inherit; font-size: 0.9rem; width: 140px; outline: none; color: #222; }
+        .footer { margin-top: 25px; text-align: center; font-size: 0.7rem; opacity: 0.8; padding-top: 10px; border-top: 1px dashed #aaa; }
+        
+        .error-msg { 
+            background: transparent; 
+            color: #000; 
+            padding: 8px 5px; 
+            text-align: center; 
+            font-weight: bold; 
+            margin-top: 15px; 
+            font-size: 0.8rem; 
+            text-transform: uppercase;
+        }
+
+        .printer.printing { animation: rumble 0.1s infinite; }
+        @keyframes rumble {
+            0% { transform: rotateX(15deg) translateY(20px) translate(0, 0); }
+            50% { transform: rotateX(15deg) translateY(20px) translate(0.5px, 0.5px); }
+            100% { transform: rotateX(15deg) translateY(20px) translate(-0.5px, -0.5px); }
+        }
+
+        /* --- MOBILE RESPONSIVENESS --- */
+        @media (max-width: 550px) {
+            .printer {
+                transform: rotateX(15deg) translateY(20px) scale(0.65);
+                transform-origin: bottom center;
+                margin-bottom: -60px; 
+            }
+            
+            /* Need to redefine rumble animation for mobile to respect the scale */
+            .printer.printing { animation: rumble-mobile 0.1s infinite; }
+        }
+
+        @keyframes rumble-mobile {
+            0% { transform: rotateX(15deg) translateY(20px) scale(0.65) translate(0, 0); }
+            50% { transform: rotateX(15deg) translateY(20px) scale(0.65) translate(0.5px, 0.5px); }
+            100% { transform: rotateX(15deg) translateY(20px) scale(0.65) translate(-0.5px, -0.5px); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="printer" id="printer">
+        
+        <!-- Layer 1: Base/Chassis -->
+        <div class="printer-body"></div>
+
+        <!-- Layer 2: Top Rear Surface -->
+        <div class="top-rear"></div>
+
+        <!-- Layer 3: Paper (Sandwiched) -->
+        <div class="receipt-wrapper" id="paperFeed">
+            <div class="receipt" id="receiptTemplate" style="display:none;">
+                <form onsubmit="return false;">
+                    <div class="header">QUOTE RECEIPT</div>
+                    <div class="meta" id="ts"></div>
+                    <textarea class="quoteInput" placeholder="Enter quote..." spellcheck="false" required></textarea>
+                    <div class="attribution">
+                        <span>--&nbsp;</span>
+                        <input type="text" class="authorInput" placeholder="Anonymous">
+                    </div>
+                    <div class="footer">
+                        CERTIFIED STUPID<br>
+                        NO REFUNDS. NO CONTEXT.
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Layer 4: Top Front Surface + Controls -->
+        <div class="top-front">
+            <div class="slot-housing">
+                <div class="center-marker"></div>
+            </div>
+            <div class="push-lever"></div>
+            
+            <div class="panel-area">
+                <div class="led-group">
+                    <div class="led power" id="ledPower" title="Power"></div>
+                    <div class="led conn" id="ledConn" title="Connection"></div>
+                    <div class="led error" id="ledErr" title="Error"></div>
+                </div>
+                <div class="feed-btn" id="printBtn" title="Print">
+                    <div class="icon-print"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const printer = document.getElementById('printer');
+        const paperFeed = document.getElementById('paperFeed');
+        const template = document.getElementById('receiptTemplate');
+        const printBtn = document.getElementById('printBtn');
+        const ledPower = document.getElementById('ledPower');
+        const ledConn = document.getElementById('ledConn');
+        const ledErr = document.getElementById('ledErr');
+
+        let currentReceiptEl = null;
+        let printerHost = 'https://receipt.local:5000'; // Target local printer (HTTPS)
+        let isConnected = false;
+
+        window.addEventListener('load', () => {
+            ledPower.classList.add('on');
+            checkConnection();
+            spawnNewReceipt();
+            
+            // Poll connection every 10 seconds
+            setInterval(checkConnection, 10000);
+        });
+
+        async function checkConnection() {
+            try {
+                const res = await fetch(`${printerHost}/status`, { 
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                if(res.ok) {
+                    isConnected = true;
+                    ledConn.classList.add('on');
+                    ledConn.classList.remove('blink');
+                } else {
+                    throw new Error('Status not OK');
+                }
+            } catch (e) {
+                isConnected = false;
+                ledConn.classList.remove('on');
+                // ledConn.classList.add('blink'); // Optional: blink if lost?
+                console.log("Printer offline:", e);
+            }
+        }
+
+        printBtn.addEventListener('click', handlePrint);
+        document.addEventListener('keydown', (e) => {
+            if(e.ctrlKey && e.key === 'Enter') handlePrint();
+        });
+
+        function spawnNewReceipt() {
+            const clone = template.cloneNode(true);
+            clone.id = '';
+            clone.style.display = 'block';
+            
+            const now = new Date();
+            clone.querySelector('#ts').textContent = 
+                now.toLocaleDateString().toUpperCase() + ' ' + 
+                now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            const ta = clone.querySelector('.quoteInput');
+            ta.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+                if(this.value.trim().length > 0) printBtn.classList.add('ready');
+                else printBtn.classList.remove('ready');
+            });
+
+            paperFeed.appendChild(clone);
+            void clone.offsetWidth;
+            
+            clone.classList.add('active');
+            ta.focus();
+            currentReceiptEl = clone;
+        }
+
+        async function handlePrint() {
+            if(!currentReceiptEl) return;
+            
+            // Re-check connection immediately before printing
+            if(!isConnected) {
+                await checkConnection(); // Try one last time
+                if(!isConnected) {
+                    fail("PRINTER OFFLINE");
+                    return;
+                }
+            }
+
+            const quoteInput = currentReceiptEl.querySelector('.quoteInput');
+            const authorInput = currentReceiptEl.querySelector('.authorInput');
+            const quote = quoteInput.value.trim();
+            const author = authorInput.value.trim() || "Anonymous";
+
+            if(!quote) {
+                quoteInput.focus();
+                return;
+            }
+
+            quoteInput.disabled = true;
+            authorInput.disabled = true;
+            printBtn.classList.remove('ready');
+            printBtn.style.pointerEvents = 'none';
+            printer.classList.add('printing');
+            ledConn.classList.add('blink');
+
+            try {
+                const res = await fetch(`${printerHost}/print`, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ quote, author })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    success();
+                } else {
+                    fail(data.error);
+                }
+            } catch (err) {
+                console.warn("Print error", err);
+                fail("CONNECTION FAILED");
+            } finally {
+                printer.classList.remove('printing');
+                ledConn.classList.remove('blink');
+                // Restore steady light if connected
+                if(isConnected) ledConn.classList.add('on');
+            }
+        }
+
+        function success() {
+            currentReceiptEl.classList.remove('active');
+            currentReceiptEl.classList.add('torn');
+            
+            setTimeout(() => {
+                spawnNewReceipt();
+                printBtn.style.pointerEvents = 'auto';
+                setTimeout(() => {
+                    if(currentReceiptEl.parentNode && currentReceiptEl.classList.contains('torn')) {
+                         currentReceiptEl.parentNode.removeChild(currentReceiptEl);
+                    }
+                }, 1000);
+            }, 1200);
+        }
+
+        function fail(msg) {
+            ledErr.classList.add('blink');
+            const errDiv = document.createElement('div');
+            errDiv.className = 'error-msg';
+            errDiv.innerHTML = `-----------------------<br>ERR: ${msg}<br>-----------------------`;
+            currentReceiptEl.querySelector('form').appendChild(errDiv);
+            
+            const qi = currentReceiptEl.querySelector('.quoteInput');
+            const ai = currentReceiptEl.querySelector('.authorInput');
+            qi.disabled = false;
+            ai.disabled = false;
+            printBtn.style.pointerEvents = 'auto';
+
+            setTimeout(() => ledErr.classList.remove('blink'), 3000);
+        }
+    </script>
+</body>
+</html>

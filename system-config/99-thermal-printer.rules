@@ -1,0 +1,5 @@
+# Quote Receipt Printer
+# UPDATE with YOUR vendor/product IDs
+# Run `lsusb` to find these values
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="5720", MODE="0666"
+
