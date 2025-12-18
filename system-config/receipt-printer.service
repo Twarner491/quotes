@@ -1,16 +1,16 @@
 [Unit]
-Description=Quote Receipt Printer
-After=network-online.target avahi-daemon.service
+Description=Quote Receipt Printer MQTT Subscriber
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# User configured for default pi
+# UPDATE User with your actual username if different from 'pi'
 User=pi
-# Working directory must be absolute
+# UPDATE WorkingDirectory to where you cloned the repo
 WorkingDirectory=/home/pi/quotes
-# Python path and app location
-ExecStart=/usr/bin/python3 /home/pi/quotes/src/app.py
+# Run the MQTT subscriber script
+ExecStart=/usr/bin/python3 /home/pi/quotes/src/mqtt_print_subscriber.py
 Restart=always
 RestartSec=5
 

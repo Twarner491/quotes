@@ -3,3 +3,4 @@ python-escpos
 pyusb
 pillow
 flask-cors
+paho-mqtt

@@ -534,38 +534,19 @@
         const ledErr = document.getElementById('ledErr');
 
         let currentReceiptEl = null;
-        let printerHost = 'https://receipt.local:5000'; // Target local printer (HTTPS)
-        let isConnected = false;
+        
+        // Home Assistant Configuration
+        // IMPORTANT: Create a webhook automation in Home Assistant and use that URL here
+        const HA_WEBHOOK_URL = 'https://admin.onethreenine.net/api/webhook/quote_receipt_print';
+        
+        let isConnected = true; // Assume connected since we're using HA cloud
 
         window.addEventListener('load', () => {
             ledPower.classList.add('on');
-            checkConnection();
+            // With HA webhook, we assume it's always reachable (cloud hosted)
+            ledConn.classList.add('on');
             spawnNewReceipt();
-            
-            // Poll connection every 10 seconds
-            setInterval(checkConnection, 10000);
         });
-
-        async function checkConnection() {
-            try {
-                const res = await fetch(`${printerHost}/status`, { 
-                    method: 'GET',
-                    mode: 'cors'
-                });
-                if(res.ok) {
-                    isConnected = true;
-                    ledConn.classList.add('on');
-                    ledConn.classList.remove('blink');
-                } else {
-                    throw new Error('Status not OK');
-                }
-            } catch (e) {
-                isConnected = false;
-                ledConn.classList.remove('on');
-                // ledConn.classList.add('blink'); // Optional: blink if lost?
-                console.log("Printer offline:", e);
-            }
-        }
 
         printBtn.addEventListener('click', handlePrint);
         document.addEventListener('keydown', (e) => {
@@ -600,15 +581,6 @@
 
         async function handlePrint() {
             if(!currentReceiptEl) return;
-            
-            // Re-check connection immediately before printing
-            if(!isConnected) {
-                await checkConnection(); // Try one last time
-                if(!isConnected) {
-                    fail("PRINTER OFFLINE");
-                    return;
-                }
-            }
 
             const quoteInput = currentReceiptEl.querySelector('.quoteInput');
             const authorInput = currentReceiptEl.querySelector('.authorInput');
@@ -628,18 +600,18 @@
             ledConn.classList.add('blink');
 
             try {
-                const res = await fetch(`${printerHost}/print`, {
+                const res = await fetch(HA_WEBHOOK_URL, {
                     method: 'POST',
                     mode: 'cors',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ quote, author })
                 });
-                const data = await res.json();
                 
-                if (data.success) {
+                // HA webhooks return 200 OK if received, actual print happens async via MQTT
+                if (res.ok) {
                     success();
                 } else {
-                    fail(data.error);
+                    fail("HA API Error: " + res.status);
                 }
             } catch (err) {
                 console.warn("Print error", err);
@@ -647,8 +619,7 @@
             } finally {
                 printer.classList.remove('printing');
                 ledConn.classList.remove('blink');
-                // Restore steady light if connected
-                if(isConnected) ledConn.classList.add('on');
+                ledConn.classList.add('on');
             }
         }
 
