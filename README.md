@@ -41,7 +41,7 @@ sudo systemctl start avahi-daemon
 Clone this repository:
 ```bash
 cd ~
-git clone https://github.com/yourusername/quotes.git
+git clone https://github.com/Twarner491/quotes.git
 cd quotes
 ```
 
@@ -99,7 +99,7 @@ This creates `cert.pem` and `key.pem`. The Flask app will automatically detect t
 ### 6. Auto-Start Service
 Configure the systemd service to run the app on boot.
 
-1. Edit `system-config/receipt-printer.service` to match your username and path if different from defaults (`/home/pi/quotes`).
+1. Edit `system-config/receipt-printer.service` to match your username and path if different from defaults.
 2. Install and enable the service:
 
 ```bash
@@ -108,26 +108,3 @@ sudo systemctl daemon-reload
 sudo systemctl enable receipt-printer.service
 sudo systemctl restart receipt-printer.service
 ```
-
-### 7. Hosting the Frontend (GitHub Pages)
-The frontend is designed to be hosted statically on GitHub Pages.
-
-1. Run the build script to generate the `docs/` folder:
-   ```bash
-   python3 build_static.py
-   ```
-2. Commit and push the `docs/` folder to GitHub.
-3. In GitHub Repository Settings -> Pages:
-   - Source: **Deploy from a branch**
-   - Branch: **main** (or master), Folder: **/docs**
-4. Set your custom domain (e.g., `receipt.onethreenine.net`) in GitHub Pages settings.
-
-## Usage & Trusting the Certificate
-Since the local server uses a self-signed certificate, you must tell your browser to trust it **once per device**.
-
-1. Ensure your device is on the same network as the printer.
-2. Visit **[https://receipt.local:5000/status](https://receipt.local:5000/status)** in your browser.
-3. You will see a warning ("Your connection is not private").
-4. Click **Advanced -> Proceed to receipt.local (unsafe)**.
-5. Once you see the JSON status message, you are good to go!
-6. Open the public site (`https://receipt.onethreenine.net`) and print away.
