@@ -416,7 +416,7 @@
         
         .receipt.torn {
             /* Fly OUT upwards */
-            animation: tear-off-fly 1.2s cubic-bezier(0.45, 0, 0.55, 1) forwards;
+            animation: tear-off-fly 0.8s ease-in forwards;
         }
 
         @keyframes print-slide-up {
@@ -426,7 +426,7 @@
 
         @keyframes tear-off-fly {
             0% { transform: translateY(0) rotateX(-10deg); opacity: 1; }
-            100% { transform: translateY(-120%) rotateZ(-5deg) rotateX(10deg); opacity: 0; }
+            100% { transform: translateY(-50%) rotateX(-10deg); opacity: 0; }
         }
 
         .header { text-align: center; font-weight: 700; font-size: 1.1rem; letter-spacing: 1px; margin-bottom: 10px; }

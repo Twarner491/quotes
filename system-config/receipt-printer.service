@@ -5,12 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# User configured for monalisa
-User=monalisa
+# User configured for default pi
+User=pi
 # Working directory must be absolute
-WorkingDirectory=/home/monalisa/quotes
+WorkingDirectory=/home/pi/quotes
 # Python path and app location
-ExecStart=/usr/bin/python3 /home/monalisa/quotes/src/app.py
+ExecStart=/usr/bin/python3 /home/pi/quotes/src/app.py
 Restart=always
 RestartSec=5
 
