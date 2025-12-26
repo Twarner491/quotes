@@ -64,7 +64,11 @@ def print_quote(quote, author="Anonymous"):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', show_about=False)
+
+@app.route('/about')
+def about():
+    return render_template('index.html', show_about=True)
 
 @app.route('/status')
 def status():
