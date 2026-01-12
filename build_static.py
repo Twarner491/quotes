@@ -1,6 +1,9 @@
 import os
 import shutil
 
+# Configuration for the public static site
+PUBLIC_HA_WEBHOOK_URL = 'https://admin.onethreenine.net/api/webhook/quote_receipt_print'
+
 def replace_jinja_templates(content, show_about=False):
     """Replace Jinja2 static calls with relative paths"""
     content = content.replace("{{ url_for('static', filename='favicon.png') }}", "static/favicon.png")
@@ -9,6 +12,13 @@ def replace_jinja_templates(content, show_about=False):
     content = content.replace("{{ request.url }}", "")
     # Handle show_about variable
     content = content.replace("{{ 'true' if show_about else 'false' }}", "true" if show_about else "false")
+    
+    # Configure HA webhook URL for public static site
+    content = content.replace(
+        "const HA_WEBHOOK_URL = ''; // e.g., 'https://your-ha-instance.com/api/webhook/quote_receipt_print'",
+        f"const HA_WEBHOOK_URL = '{PUBLIC_HA_WEBHOOK_URL}';"
+    )
+    
     return content
 
 def build_site():
