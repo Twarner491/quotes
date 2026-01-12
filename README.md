@@ -114,7 +114,7 @@ action:
     data:
       topic: "home/receipt_printer/print"
       payload_template: >
-        {"quote": "{{ trigger.json.quote }}", "author": "{{ trigger.json.author | default('Anonymous') }}"}
+        {"quote": "{{ trigger.json.quote }}", "author": "{{ trigger.json.author | default('Anonymous') }}", "image": "{{ trigger.json.image | default('') }}"}
 ```
 
 ### Enable CORS
@@ -139,7 +139,9 @@ sudo systemctl enable --now receipt-printer.service
 
 ### Frontend
 
-Edit `src/templates/index.html` and set `HA_WEBHOOK_URL`, then host via GitHub Pages or use `build_static.py`.
+For public hosting with GitHub Pages, add your HA webhook URL as a GitHub Secret:
+   - Go to Settings → Secrets and variables → Actions
+   - Add secret: `HA_WEBHOOK_URL` = `https://your-ha.com/api/webhook/quote_receipt_print`
 
 ---
 
