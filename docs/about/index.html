@@ -654,7 +654,7 @@
         // MODE B: Home Assistant webhook (set your HA URL below)
         
         const LOCAL_PRINTER_URL = 'http://receipt.local:5000';
-        const HA_WEBHOOK_URL = 'https://admin.onethreenine.net/api/webhook/quote_receipt_print';
+        const HA_WEBHOOK_URL = ''; // e.g., 'https://your-ha-instance.com/api/webhook/quote_receipt_print'
         
         // Auto-detect mode: if HA_WEBHOOK_URL is set, use it. Otherwise use local Flask.
         const USE_HOME_ASSISTANT = HA_WEBHOOK_URL.length > 0;
