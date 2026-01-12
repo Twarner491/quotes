@@ -99,14 +99,18 @@ def print_quote(quote, author="Anonymous", image_base64=None):
         p.text(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         p.text("=" * 32 + "\n\n")
 
-        # Quote body
-        p.set(align='left', bold=False)
-        wrapped = textwrap.fill(f'"{quote}"', width=32)
-        p.text(wrapped + "\n\n")
+        # Quote body (if provided)
+        if quote:
+            p.set(align='left', bold=False)
+            wrapped = textwrap.fill(f'"{quote}"', width=32)
+            p.text(wrapped + "\n\n")
 
-        # Attribution
-        p.set(align='right', bold=False)
-        p.text(f"-- {author}\n\n")
+            # Attribution
+            p.set(align='right', bold=False)
+            p.text(f"-- {author}\n\n")
+        else:
+            # Image only - just add some spacing
+            p.text("\n")
 
         # Print image if provided
         if image_base64:
@@ -159,12 +163,14 @@ def on_message(client, userdata, msg):
         author = payload.get("author", "Anonymous").strip()
         image_base64 = payload.get("image")  # Optional base64 encoded image
 
-        if not quote:
-            print("[WARN] Received empty quote, ignoring.")
+        # Allow printing if either quote or image is provided
+        if not quote and not image_base64:
+            print("[WARN] Received empty quote and no image, ignoring.")
             return
 
         has_image = " (with image)" if image_base64 else ""
-        print(f"[INFO] Received print job{has_image}: \"{quote[:50]}...\" by {author}")
+        content_preview = quote[:50] if quote else "[image only]"
+        print(f"[INFO] Received print job{has_image}: \"{content_preview}...\" by {author}")
         
         success = print_quote(quote, author, image_base64)
         

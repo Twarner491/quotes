@@ -81,15 +81,19 @@ def print_quote(quote, author="Anonymous", image_base64=None):
         p.text(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         p.text("=" * 32 + "\n\n")
 
-        # Quote body
-        p.set(align='left', bold=False)
-        # Wrap text to 32 characters for standard 80mm thermal paper with this font size
-        wrapped = textwrap.fill(f'"{quote}"', width=32)
-        p.text(wrapped + "\n\n")
+        # Quote body (if provided)
+        if quote:
+            p.set(align='left', bold=False)
+            # Wrap text to 32 characters for standard 80mm thermal paper with this font size
+            wrapped = textwrap.fill(f'"{quote}"', width=32)
+            p.text(wrapped + "\n\n")
 
-        # Attribution
-        p.set(align='right', bold=False)
-        p.text(f"-- {author}\n\n")
+            # Attribution
+            p.set(align='right', bold=False)
+            p.text(f"-- {author}\n\n")
+        else:
+            # Image only - just add some spacing
+            p.text("\n")
 
         # Print image if provided
         if image_base64:
@@ -137,8 +141,9 @@ def print_receipt():
     author = data.get('author', 'Anonymous').strip()
     image_base64 = data.get('image')  # Optional base64 encoded image
 
-    if not quote:
-        return jsonify({'success': False, 'error': 'Quote cannot be empty'}), 400
+    # Allow printing if either quote or image is provided
+    if not quote and not image_base64:
+        return jsonify({'success': False, 'error': 'Quote or image required'}), 400
 
     success = print_quote(quote, author, image_base64)
 

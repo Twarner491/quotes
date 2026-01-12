@@ -825,7 +825,8 @@
             const quote = quoteInput.value.trim();
             const author = authorInput.value.trim() || "Anonymous";
 
-            if(!quote) {
+            // Allow printing if either quote or image is provided
+            if(!quote && !currentImageData) {
                 quoteInput.focus();
                 return;
             }
