@@ -139,9 +139,9 @@ sudo systemctl enable --now receipt-printer.service
 
 ### Frontend
 
-For public hosting with GitHub Pages, add your HA webhook URL as a GitHub Secret:
+To enable remote access on your fork, add your HA webhook URL as a GitHub Secret:
    - Go to Settings → Secrets and variables → Actions
-   - Add secret: `HA_WEBHOOK_URL` = `https://your-ha.com/api/webhook/quote_receipt_print`
+   - Add secret: `HA_WEBHOOK_URL` = Your Home Assistant webhook URL (e.g., `https://your-ha.com/api/webhook/quote_receipt_print`)
 
 ---
 
