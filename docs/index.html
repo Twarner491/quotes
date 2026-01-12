@@ -433,8 +433,64 @@
         .meta { text-align: center; font-size: 0.75rem; color: #555; margin-bottom: 15px; border-bottom: 1px dashed #aaa; padding-bottom: 10px; }
         textarea { width: 100%; background: transparent; border: none; font-family: inherit; font-size: 1.1rem; line-height: 1.4; color: #111; resize: none; outline: none; overflow: hidden; min-height: 80px; font-weight: 700; }
         textarea::placeholder { color: #bbb; font-weight: 400; }
-        .attribution { display: flex; justify-content: flex-end; margin-top: 10px; font-size: 0.9rem; color: #444; }
+        .attribution { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.9rem; color: #444; }
         input[type="text"] { background: transparent; border: none; border-bottom: 1px solid #ccc; text-align: right; font-family: inherit; font-size: 0.9rem; width: 140px; outline: none; color: #222; }
+        
+        /* Image Upload Button */
+        .img-upload-btn {
+            width: 24px;
+            height: 24px;
+            border: 1px dashed #aaa;
+            border-radius: 4px;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.6;
+            transition: opacity 0.2s, border-color 0.2s;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .img-upload-btn:hover { opacity: 1; border-color: #666; }
+        .img-upload-btn.has-image { 
+            border-style: solid; 
+            border-color: #888; 
+            opacity: 0.7;
+        }
+        .img-upload-btn.has-image:hover { opacity: 1; }
+        .img-upload-btn.has-image .img-icon { display: none; }
+        .img-upload-btn.has-image .img-remove-icon { display: block; }
+        .img-upload-btn .img-icon {
+            width: 14px;
+            height: 14px;
+            stroke: #666;
+            stroke-width: 1.5;
+            fill: none;
+        }
+        .img-upload-btn .img-remove-icon {
+            display: none;
+            width: 14px;
+            height: 14px;
+            stroke: #888;
+            stroke-width: 2;
+        }
+        .img-file-input { display: none; }
+        
+        /* Image Preview on Receipt */
+        .img-preview-container {
+            display: none;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .img-preview-container.visible { display: block; }
+        .img-preview {
+            max-width: 100%;
+            max-height: 120px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            filter: grayscale(100%) contrast(1.2);
+        }
         .footer { margin-top: 25px; text-align: center; font-size: 0.7rem; opacity: 0.8; padding-top: 10px; border-top: 1px dashed #aaa; }
         
         .error-msg { 
@@ -519,6 +575,21 @@
                     <div class="attribution">
                         <span>--&nbsp;</span>
                         <input type="text" class="authorInput" placeholder="Anonymous">
+                        <label class="img-upload-btn" title="Add photo (optional)">
+                            <input type="file" class="img-file-input" accept="image/*">
+                            <svg class="img-icon" viewBox="0 0 24 24">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                            <svg class="img-remove-icon" viewBox="0 0 24 24">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </label>
+                    </div>
+                    <div class="img-preview-container">
+                        <img class="img-preview" src="" alt="Preview">
                     </div>
                     <div class="footer">
                         CERTIFIED STUPID<br>
@@ -667,10 +738,13 @@
             if(e.ctrlKey && e.key === 'Enter') handlePrint();
         });
 
+        let currentImageData = null; // Store base64 image data
+
         function spawnNewReceipt() {
             const clone = template.cloneNode(true);
             clone.id = '';
             clone.style.display = 'block';
+            currentImageData = null; // Reset image data
             
             const now = new Date();
             clone.querySelector('#ts').textContent = 
@@ -683,6 +757,47 @@
                 this.style.height = (this.scrollHeight) + 'px';
                 if(this.value.trim().length > 0) printBtn.classList.add('ready');
                 else printBtn.classList.remove('ready');
+            });
+
+            // Image upload handling
+            const imgInput = clone.querySelector('.img-file-input');
+            const imgBtn = clone.querySelector('.img-upload-btn');
+            const imgPreviewContainer = clone.querySelector('.img-preview-container');
+            const imgPreview = clone.querySelector('.img-preview');
+
+            imgInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // Validate file size (max 2MB)
+                    if (file.size > 2 * 1024 * 1024) {
+                        alert('Image too large. Max 2MB.');
+                        return;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        currentImageData = ev.target.result; // Full data URL
+                        imgBtn.classList.add('has-image');
+                        imgBtn.title = 'Remove photo';
+                        imgPreviewContainer.classList.add('visible');
+                        imgPreview.src = currentImageData;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            // Click handler for the label - remove image if one exists
+            imgBtn.addEventListener('click', function(e) {
+                if (imgBtn.classList.contains('has-image')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    currentImageData = null;
+                    imgInput.value = '';
+                    imgBtn.classList.remove('has-image');
+                    imgBtn.title = 'Add photo (optional)';
+                    imgPreviewContainer.classList.remove('visible');
+                    imgPreview.src = '';
+                }
             });
 
             paperFeed.appendChild(clone);
@@ -723,11 +838,18 @@
             ledConn.classList.add('blink');
 
             try {
+                // Build payload with optional image
+                const payload = { quote, author };
+                if (currentImageData) {
+                    // Send just the base64 part (remove data:image/...;base64, prefix)
+                    payload.image = currentImageData.split(',')[1];
+                }
+                
                 const res = await fetch(PRINT_ENDPOINT, {
                     method: 'POST',
                     mode: 'cors',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ quote, author })
+                    body: JSON.stringify(payload)
                 });
                 
                 if (USE_HOME_ASSISTANT) {
