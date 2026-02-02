@@ -4,3 +4,4 @@ pyusb
 pillow
 flask-cors
 paho-mqtt
+numpy

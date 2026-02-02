@@ -5,7 +5,8 @@ from datetime import datetime
 import textwrap
 import base64
 import io
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
+import numpy as np
 
 app = Flask(__name__)
 CORS(app) # Allow cross-origin requests
@@ -25,17 +26,70 @@ IN_EP = 0x81            # Your IN endpoint
 PRINTER_WIDTH_PIXELS = 384
 MAX_IMAGE_WIDTH = 370  # Leave small margin on edges
 
-def process_image_for_thermal(image_base64):
+# Dithering mode: 'floyd-steinberg', 'ordered', or 'threshold'
+# Floyd-Steinberg produces the best results for photos
+# Ordered dithering gives a more retro/patterned look
+# Threshold is the simple on/off (original behavior)
+DITHER_MODE = 'floyd-steinberg'
+
+# Image enhancement settings (1.0 = no change)
+CONTRAST_BOOST = 1.2   # Increase contrast slightly for better thermal printing
+SHARPNESS_BOOST = 1.3  # Sharpen edges for clearer output
+
+# ============================================================================
+# IMAGE PROCESSING (r1b-inspired algorithms)
+# ============================================================================
+
+# 8x8 Bayer ordered dithering matrix (from r1b)
+BAYER_MATRIX_8X8 = np.array([
+    [ 0, 32,  8, 40,  2, 34, 10, 42],
+    [48, 16, 56, 24, 50, 18, 58, 26],
+    [12, 44,  4, 36, 14, 46,  6, 38],
+    [60, 28, 52, 20, 62, 30, 54, 22],
+    [ 3, 35, 11, 43,  1, 33,  9, 41],
+    [51, 19, 59, 27, 49, 17, 57, 25],
+    [15, 47,  7, 39, 13, 45,  5, 37],
+    [63, 31, 55, 23, 61, 29, 53, 21]
+], dtype=np.float32) / 64.0  # Normalize to 0-1 range
+
+def ordered_dither(img_array):
+    """
+    Apply ordered (Bayer) dithering to a grayscale image array.
+    Inspired by r1b's R1B_DTHR_ORD algorithm.
+    Produces a retro, patterned appearance.
+    """
+    height, width = img_array.shape
+    # Tile the Bayer matrix to cover the entire image
+    threshold_matrix = np.tile(BAYER_MATRIX_8X8,
+                               (height // 8 + 1, width // 8 + 1))[:height, :width]
+    # Apply threshold: pixel > threshold -> white, else black
+    return (img_array > threshold_matrix * 255).astype(np.uint8) * 255
+
+def process_image_for_thermal(image_base64, dither_mode=None, contrast=None, sharpness=None):
     """
     Process a base64 encoded image for thermal printing.
-    Converts to black & white, resizes to fit paper width.
+    Uses r1b-inspired dithering algorithms for better quality output.
+
+    Dithering modes:
+    - 'floyd-steinberg': Best for photos, smooth gradients (default)
+    - 'ordered': Retro patterned look, good for graphics
+    - 'threshold': Simple on/off, fastest but loses detail
+
     Returns a PIL Image ready for printing.
     """
+    # Use defaults if not specified
+    if dither_mode is None:
+        dither_mode = DITHER_MODE
+    if contrast is None:
+        contrast = CONTRAST_BOOST
+    if sharpness is None:
+        sharpness = SHARPNESS_BOOST
+
     try:
         # Decode base64 image
         image_data = base64.b64decode(image_base64)
         img = Image.open(io.BytesIO(image_data))
-        
+
         # Convert to RGB if necessary (handles RGBA, palette, etc.)
         if img.mode in ('RGBA', 'LA', 'P'):
             # Create white background for transparent images
@@ -46,23 +100,46 @@ def process_image_for_thermal(image_base64):
             img = background
         elif img.mode != 'RGB':
             img = img.convert('RGB')
-        
+
         # Resize to fit printer width while maintaining aspect ratio
         if img.width > MAX_IMAGE_WIDTH:
             ratio = MAX_IMAGE_WIDTH / img.width
             new_height = int(img.height * ratio)
             img = img.resize((MAX_IMAGE_WIDTH, new_height), Image.Resampling.LANCZOS)
-        
+
         # Limit height to reasonable size (max 400px to not use too much paper)
         if img.height > 400:
             ratio = 400 / img.height
             new_width = int(img.width * ratio)
             img = img.resize((new_width, 400), Image.Resampling.LANCZOS)
-        
-        # Convert to grayscale then to 1-bit black & white with dithering
-        img = img.convert('L')  # Grayscale
-        img = img.point(lambda x: 0 if x < 128 else 255, '1')  # Simple threshold
-        
+
+        # Convert to grayscale for processing
+        img = img.convert('L')
+
+        # Apply contrast enhancement (helps thermal printing)
+        if contrast != 1.0:
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(contrast)
+
+        # Apply sharpening (makes edges clearer on thermal paper)
+        if sharpness != 1.0:
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(sharpness)
+
+        # Apply dithering based on selected mode
+        if dither_mode == 'floyd-steinberg':
+            # PIL's built-in Floyd-Steinberg dithering
+            # This is what r1b calls R1B_DTHR_FS
+            img = img.convert('1')
+        elif dither_mode == 'ordered':
+            # Ordered (Bayer) dithering - r1b's R1B_DTHR_ORD
+            img_array = np.array(img, dtype=np.float32)
+            dithered = ordered_dither(img_array)
+            img = Image.fromarray(dithered, mode='L').convert('1')
+        else:
+            # Simple threshold (original behavior)
+            img = img.point(lambda x: 0 if x < 128 else 255, '1')
+
         return img
     except Exception as e:
         print(f"Image processing error: {e}")
