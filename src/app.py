@@ -149,23 +149,99 @@ def process_image_for_thermal(image_base64, dither_mode=None, contrast=None, sha
 # ============================================================================
 # TEXT RENDERING (for non-ASCII: CJK, Arabic, emoji, etc.)
 # ============================================================================
-FONT_PATHS = [
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
-    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-]
 TEXT_FONT_SIZE = 22
 AUTHOR_FONT_SIZE = 18
+EMOJI_NATIVE_SIZE = 109  # NotoColorEmoji only renders at this size
 
-def _load_font(size):
-    """Load a Unicode-capable font at the given size."""
-    for path in FONT_PATHS:
+_font_cache = {}
+
+def _load_text_font(size):
+    """Load a Unicode-capable text font (CJK/Arabic/Latin) at the given size."""
+    key = ("text", size)
+    if key not in _font_cache:
+        for path in [
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        ]:
+            try:
+                _font_cache[key] = ImageFont.truetype(path, size, layout_engine=ImageFont.Layout.RAQM)
+                return _font_cache[key]
+            except Exception:
+                continue
+        _font_cache[key] = ImageFont.load_default()
+    return _font_cache[key]
+
+def _load_emoji_font():
+    """Load the color emoji font at its native size."""
+    if "emoji" not in _font_cache:
         try:
-            return ImageFont.truetype(path, size, layout_engine=ImageFont.Layout.RAQM)
+            _font_cache["emoji"] = ImageFont.truetype(
+                "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+                EMOJI_NATIVE_SIZE)
         except Exception:
-            continue
-    return ImageFont.load_default()
+            _font_cache["emoji"] = None
+    return _font_cache["emoji"]
+
+def _is_emoji(ch):
+    """Check if a character is an emoji."""
+    cp = ord(ch)
+    if cp >= 0x1F600 and cp <= 0x1F64F:
+        return True
+    if cp >= 0x1F300 and cp <= 0x1F5FF:
+        return True
+    if cp >= 0x1F680 and cp <= 0x1F6FF:
+        return True
+    if cp >= 0x1F900 and cp <= 0x1F9FF:
+        return True
+    if cp >= 0x1FA00 and cp <= 0x1FA6F:
+        return True
+    if cp >= 0x1FA70 and cp <= 0x1FAFF:
+        return True
+    if cp >= 0x2600 and cp <= 0x26FF:
+        return True
+    if cp >= 0x2700 and cp <= 0x27BF:
+        return True
+    if cp >= 0xFE00 and cp <= 0xFE0F:
+        return True
+    if cp == 0x200D:
+        return True
+    if cp == 0x20E3:
+        return True
+    if cp >= 0xE0020 and cp <= 0xE007F:
+        return True
+    cat = unicodedata.category(ch)
+    if cat == "So":
+        return cp > 0x2100
+    return False
+
+def _render_emoji_glyph(ch, target_height):
+    """Render a single emoji at native size and scale down to target_height."""
+    emoji_font = _load_emoji_font()
+    if not emoji_font:
+        return None, 0
+    try:
+        canvas = Image.new("RGBA", (EMOJI_NATIVE_SIZE * 2, EMOJI_NATIVE_SIZE * 2), (255, 255, 255, 255))
+        draw = ImageDraw.Draw(canvas)
+        draw.text((0, 0), ch, font=emoji_font, embedded_color=True)
+        bbox = canvas.getbbox()
+        if not bbox:
+            return None, 0
+        cropped = canvas.crop(bbox)
+        ratio = target_height / cropped.height
+        new_w = max(1, int(cropped.width * ratio))
+        scaled = cropped.resize((new_w, target_height), Image.Resampling.LANCZOS)
+        gray = Image.new("L", scaled.size, 255)
+        for y in range(scaled.height):
+            for x in range(scaled.width):
+                r, g, b, a = scaled.getpixel((x, y))
+                if a > 0:
+                    lum = int(0.299 * r + 0.587 * g + 0.114 * b)
+                    lum = int(lum * (a / 255) + 255 * (1 - a / 255))
+                    gray.putpixel((x, y), lum)
+        return gray, new_w
+    except Exception:
+        return None, 0
 
 def needs_image_rendering(text):
     """Check if text contains characters the printer can't handle natively."""
@@ -174,51 +250,114 @@ def needs_image_rendering(text):
             return True
     return False
 
+def _segment_text(text):
+    """Split text into runs of (is_emoji, substring)."""
+    segments = []
+    current = ""
+    current_is_emoji = False
+    for ch in text:
+        ch_emoji = _is_emoji(ch)
+        if current and ch_emoji != current_is_emoji:
+            segments.append((current_is_emoji, current))
+            current = ch
+            current_is_emoji = ch_emoji
+        else:
+            current += ch
+            current_is_emoji = ch_emoji
+    if current:
+        segments.append((current_is_emoji, current))
+    return segments
+
+def _measure_segment(seg_is_emoji, seg_text, text_font, glyph_height):
+    """Measure the pixel width of a text segment."""
+    if seg_is_emoji:
+        w = 0
+        for ch in seg_text:
+            _, ew = _render_emoji_glyph(ch, glyph_height)
+            w += ew if ew else glyph_height
+        return w
+    else:
+        bbox = text_font.getbbox(seg_text)
+        return bbox[2] - bbox[0] if bbox else 0
+
 def render_text_image(text, font_size=TEXT_FONT_SIZE, max_width=MAX_IMAGE_WIDTH,
                       align="left", bold=False):
-    """Render text as a 1-bit image for thermal printing."""
-    font = _load_font(font_size)
+    """Render text as a 1-bit image for thermal printing with emoji support."""
+    text_font = _load_text_font(font_size)
+    glyph_height = int(font_size * 1.2)
+    line_height = int(font_size * 1.4)
 
-    # Word-wrap: character-level wrapping handles CJK and Latin
     lines = []
     for paragraph in text.split("\n"):
         if not paragraph:
             lines.append("")
             continue
         current_line = ""
+        current_width = 0
         for char in paragraph:
-            test = current_line + char
-            bbox = font.getbbox(test)
-            width = bbox[2] - bbox[0]
-            if width > max_width and current_line:
+            is_em = _is_emoji(char)
+            if is_em:
+                _, char_w = _render_emoji_glyph(char, glyph_height)
+                char_w = char_w if char_w else glyph_height
+            else:
+                test = current_line + char
+                bbox = text_font.getbbox(test)
+                test_w = bbox[2] - bbox[0] if bbox else 0
+                char_w = test_w - current_width
+            if current_width + char_w > max_width and current_line:
                 lines.append(current_line)
                 current_line = char
+                if is_em:
+                    current_width = char_w
+                else:
+                    bbox = text_font.getbbox(char)
+                    current_width = bbox[2] - bbox[0] if bbox else 0
             else:
-                current_line = test
+                current_line += char
+                if is_em:
+                    current_width += char_w
+                else:
+                    bbox = text_font.getbbox(current_line)
+                    current_width = bbox[2] - bbox[0] if bbox else 0
         if current_line:
             lines.append(current_line)
 
     if not lines:
         return None
 
-    line_height = int(font_size * 1.4)
     img_height = line_height * len(lines) + 4
     img = Image.new("L", (max_width, img_height), 255)
     draw = ImageDraw.Draw(img)
 
     for i, line in enumerate(lines):
         y = i * line_height
+        segments = _segment_text(line)
+
+        total_w = 0
+        for seg_emoji, seg_text in segments:
+            total_w += _measure_segment(seg_emoji, seg_text, text_font, glyph_height)
+
         if align == "center":
-            bbox = font.getbbox(line)
-            lw = bbox[2] - bbox[0]
-            x = (max_width - lw) // 2
+            x = (max_width - total_w) // 2
         elif align == "right":
-            bbox = font.getbbox(line)
-            lw = bbox[2] - bbox[0]
-            x = max_width - lw
+            x = max_width - total_w
         else:
             x = 0
-        draw.text((x, y), line, fill=0, font=font)
+
+        for seg_emoji, seg_text in segments:
+            if seg_emoji:
+                for ch in seg_text:
+                    emoji_img, ew = _render_emoji_glyph(ch, glyph_height)
+                    if emoji_img:
+                        ey = y + (line_height - glyph_height) // 2
+                        img.paste(emoji_img, (x, ey))
+                        x += ew
+                    else:
+                        x += glyph_height
+            else:
+                draw.text((x, y), seg_text, fill=0, font=text_font)
+                bbox = text_font.getbbox(seg_text)
+                x += bbox[2] - bbox[0] if bbox else 0
 
     return img.convert("1")
 
