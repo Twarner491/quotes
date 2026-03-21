@@ -158,6 +158,33 @@ def process_image_for_thermal(image_base64, dither_mode=None, contrast=None, sha
         return None
 
 # ============================================================================
+# PAPER STATUS
+# ============================================================================
+PAPER_STATUS_LABELS = {0: "out", 1: "near_end", 2: "ok"}
+
+def check_paper(mqtt_client=None):
+    """Check paper status. Returns (status_int, label) and publishes to MQTT."""
+    try:
+        p = Usb(VENDOR_ID, PRODUCT_ID, out_ep=OUT_EP, in_ep=IN_EP)
+        status = p.paper_status()
+        p.close()
+    except Exception as e:
+        print(f"[ERROR] Could not query paper status: {e}")
+        return (2, "unknown")  # assume ok if we can't check
+
+    label = PAPER_STATUS_LABELS.get(status, "unknown")
+    print(f"[INFO] Paper status: {label} ({status})")
+
+    if mqtt_client:
+        mqtt_client.publish(
+            MQTT_STATUS_TOPIC,
+            json.dumps({"paper": label}),
+            retain=True,
+        )
+
+    return (status, label)
+
+# ============================================================================
 # PRINTER FUNCTION
 # ============================================================================
 def print_quote(quote, author="Anonymous", image_base64=None):
@@ -222,8 +249,9 @@ def on_connect(client, userdata, flags, rc, properties=None):
         print(f"[OK] Connected to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
         client.subscribe(MQTT_TOPIC)
         print(f"[OK] Subscribed to topic: {MQTT_TOPIC}")
-        # Publish online status
-        client.publish(MQTT_STATUS_TOPIC, json.dumps({"status": "online"}), retain=True)
+        # Publish online status with paper check
+        paper_status, paper_label = check_paper()
+        client.publish(MQTT_STATUS_TOPIC, json.dumps({"status": "online", "paper": paper_label}), retain=True)
     else:
         print(f"[ERROR] Failed to connect to MQTT broker. Return code: {rc}")
 
@@ -245,11 +273,30 @@ def on_message(client, userdata, msg):
         has_image = " (with image)" if image_base64 else ""
         content_preview = quote[:50] if quote else "[image only]"
         print(f"[INFO] Received print job{has_image}: \"{content_preview}...\" by {author}")
-        
+
+        # Check paper before printing
+        paper_status, paper_label = check_paper(client)
+        if paper_status == 0:
+            print("[WARN] Out of paper, refusing to print")
+            client.publish(MQTT_STATUS_TOPIC, json.dumps({
+                "last_print": "refused",
+                "reason": "out_of_paper",
+                "paper": "out",
+                "quote": quote[:50],
+            }))
+            return
+
         success = print_quote(quote, author, image_base64)
-        
-        # Publish result back to status topic
-        result = {"last_print": "success" if success else "failed", "quote": quote[:50], "had_image": bool(image_base64)}
+
+        # Re-check paper after printing (may have run out during print)
+        paper_status_after, paper_label_after = check_paper(client)
+
+        result = {
+            "last_print": "success" if success else "failed",
+            "paper": paper_label_after,
+            "quote": quote[:50],
+            "had_image": bool(image_base64),
+        }
         client.publish(MQTT_STATUS_TOPIC, json.dumps(result))
 
     except json.JSONDecodeError:

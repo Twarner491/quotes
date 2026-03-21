@@ -145,6 +145,22 @@ def process_image_for_thermal(image_base64, dither_mode=None, contrast=None, sha
         print(f"Image processing error: {e}")
         return None
 
+# ============================================================================
+# PAPER STATUS
+# ============================================================================
+PAPER_STATUS_LABELS = {0: "out", 1: "near_end", 2: "ok"}
+
+def check_paper():
+    """Check paper status. Returns (status_int, label)."""
+    try:
+        p = Usb(VENDOR_ID, PRODUCT_ID, out_ep=OUT_EP, in_ep=IN_EP)
+        status = p.paper_status()
+        p.close()
+    except Exception as e:
+        print(f"Could not query paper status: {e}")
+        return (2, "unknown")
+    return (status, PAPER_STATUS_LABELS.get(status, "unknown"))
+
 def print_quote(quote, author="Anonymous", image_base64=None):
     try:
         # Initialize printer with correct endpoints
@@ -209,7 +225,8 @@ def about():
 
 @app.route('/status')
 def status():
-    return jsonify({'status': 'online', 'message': 'Printer is ready'})
+    paper_status, paper_label = check_paper()
+    return jsonify({'status': 'online', 'paper': paper_label})
 
 @app.route('/print', methods=['POST'])
 def print_receipt():
@@ -222,12 +239,20 @@ def print_receipt():
     if not quote and not image_base64:
         return jsonify({'success': False, 'error': 'Quote or image required'}), 400
 
+    # Check paper before printing
+    paper_status, paper_label = check_paper()
+    if paper_status == 0:
+        return jsonify({'success': False, 'error': 'Out of paper', 'paper': 'out'}), 503
+
     success = print_quote(quote, author, image_base64)
 
+    # Re-check paper after printing
+    _, paper_label_after = check_paper()
+
     if success:
-        return jsonify({'success': True, 'message': 'Receipt printed!'})
+        return jsonify({'success': True, 'message': 'Receipt printed!', 'paper': paper_label_after})
     else:
-        return jsonify({'success': False, 'error': 'Printer error. Check server logs.'}), 500
+        return jsonify({'success': False, 'error': 'Printer error. Check server logs.', 'paper': paper_label_after}), 500
 
 if __name__ == '__main__':
     # Running on port 5000. HTTPS is recommended for modern browser features.
