@@ -5,7 +5,8 @@ from datetime import datetime
 import textwrap
 import base64
 import io
-from PIL import Image, ImageEnhance, ImageFilter
+import unicodedata
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 import numpy as np
 
 app = Flask(__name__)
@@ -146,6 +147,82 @@ def process_image_for_thermal(image_base64, dither_mode=None, contrast=None, sha
         return None
 
 # ============================================================================
+# TEXT RENDERING (for non-ASCII: CJK, Arabic, emoji, etc.)
+# ============================================================================
+FONT_PATHS = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+]
+TEXT_FONT_SIZE = 22
+AUTHOR_FONT_SIZE = 18
+
+def _load_font(size):
+    """Load a Unicode-capable font at the given size."""
+    for path in FONT_PATHS:
+        try:
+            return ImageFont.truetype(path, size, layout_engine=ImageFont.Layout.RAQM)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+def needs_image_rendering(text):
+    """Check if text contains characters the printer can't handle natively."""
+    for ch in text:
+        if ord(ch) > 127:
+            return True
+    return False
+
+def render_text_image(text, font_size=TEXT_FONT_SIZE, max_width=MAX_IMAGE_WIDTH,
+                      align="left", bold=False):
+    """Render text as a 1-bit image for thermal printing."""
+    font = _load_font(font_size)
+
+    # Word-wrap: character-level wrapping handles CJK and Latin
+    lines = []
+    for paragraph in text.split("\n"):
+        if not paragraph:
+            lines.append("")
+            continue
+        current_line = ""
+        for char in paragraph:
+            test = current_line + char
+            bbox = font.getbbox(test)
+            width = bbox[2] - bbox[0]
+            if width > max_width and current_line:
+                lines.append(current_line)
+                current_line = char
+            else:
+                current_line = test
+        if current_line:
+            lines.append(current_line)
+
+    if not lines:
+        return None
+
+    line_height = int(font_size * 1.4)
+    img_height = line_height * len(lines) + 4
+    img = Image.new("L", (max_width, img_height), 255)
+    draw = ImageDraw.Draw(img)
+
+    for i, line in enumerate(lines):
+        y = i * line_height
+        if align == "center":
+            bbox = font.getbbox(line)
+            lw = bbox[2] - bbox[0]
+            x = (max_width - lw) // 2
+        elif align == "right":
+            bbox = font.getbbox(line)
+            lw = bbox[2] - bbox[0]
+            x = max_width - lw
+        else:
+            x = 0
+        draw.text((x, y), line, fill=0, font=font)
+
+    return img.convert("1")
+
+# ============================================================================
 # PAPER STATUS
 # ============================================================================
 PAPER_STATUS_LABELS = {0: "out", 1: "near_end", 2: "ok"}
@@ -176,14 +253,23 @@ def print_quote(quote, author="Anonymous", image_base64=None):
 
         # Quote body (if provided)
         if quote:
-            p.set(align='left', bold=False)
-            # Wrap text to 32 characters for standard 80mm thermal paper with this font size
-            wrapped = textwrap.fill(f'"{quote}"', width=32)
-            p.text(wrapped + "\n\n")
-
-            # Attribution
-            p.set(align='right', bold=False)
-            p.text(f"-- {author}\n\n")
+            quote_text = f'\u201c{quote}\u201d'
+            author_text = f"\u2014 {author}"
+            if needs_image_rendering(quote) or needs_image_rendering(author):
+                quote_img = render_text_image(quote_text, font_size=TEXT_FONT_SIZE, align="left")
+                if quote_img:
+                    p.set(align='center')
+                    p.image(quote_img, impl="bitImageColumn")
+                author_img = render_text_image(author_text, font_size=AUTHOR_FONT_SIZE, align="right")
+                if author_img:
+                    p.image(author_img, impl="bitImageColumn")
+                p.text("\n")
+            else:
+                p.set(align='left', bold=False)
+                wrapped = textwrap.fill(f'"{quote}"', width=32)
+                p.text(wrapped + "\n\n")
+                p.set(align='right', bold=False)
+                p.text(f"-- {author}\n\n")
         else:
             # Image only - just add some spacing
             p.text("\n")
