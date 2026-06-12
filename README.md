@@ -10,10 +10,10 @@ A thermal receipt printer for capturing silly quotes. Full project writeup at [t
 
 | Qty | Description | Price | Link |
 |-----|-------------|-------|------|
-| 1 | miemieyo Thermal Receipt Printer 80mm | $65.99 | [Amazon](https://www.amazon.com/dp/B0DFB82NPF) |
-| 1 | MPRT 5 Rolls Thermal Paper 3-1/8" x 230' | $15.99 | [Amazon](https://www.amazon.com/dp/B0D14DYMHQ) |
-| 1 | LM2596 Buck Converter | $7.99 | [Amazon](https://www.amazon.com/dp/B0DBVYP91F) |
-| 1 | Raspberry Pi (any model) | ~$35-80 | [Raspberry Pi](https://www.raspberrypi.com/products/) |
+| 1 | miemieyo Thermal Receipt Printer 80mm | $65.99 | [Amazon](https://amzn.to/4fNSki5) |
+| 1 | MPRT 5 Rolls Thermal Paper 3-1/8" x 230' | $15.99 | [Amazon](https://amzn.to/3PZK9EV) |
+| 1 | LM2596 Buck Converter | $7.99 | [Amazon](https://amzn.to/4gfCFIj) |
+| 1 | Raspberry Pi (any model) | ~$35-80 | [Amazon](https://amzn.to/4vGwlhy) |
 
 ---
 
