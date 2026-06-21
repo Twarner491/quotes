@@ -97,21 +97,18 @@ def _block(text, size=20, align="left", indent=0):
         d.text((x - b[0], i * lh), line, font=font, fill=0)
     return img
 
-def _box(rows, size=18, pad=16):
-    """Render rows (strings) inside a thin full-width border (the customer/order details box)."""
+def _textblock(rows, size=18):
+    """Stack rows (strings) tightly, left-aligned at MARGIN -- the customer/order header (no border)."""
     font = _font(size)
-    inner_w = CONTENT_W - 2 * pad
     lines = []
     for r in rows:
-        lines.extend(_wrap(r, font, inner_w) if r else [""])
-    lh = int(size * 1.55)
-    h = lh * len(lines) + 2 * pad
-    img = Image.new("L", (WIDTH, h), 255)
+        lines.extend(_wrap(r, font, CONTENT_W) if r else [""])
+    lh = int(size * 1.5)
+    img = Image.new("L", (WIDTH, lh * len(lines) + 2), 255)
     d = ImageDraw.Draw(img)
-    d.rectangle([MARGIN, 0, WIDTH - MARGIN - 1, h - 1], outline=0, width=1)
     for i, line in enumerate(lines):
         b = font.getbbox(line)
-        d.text((MARGIN + pad - b[0], pad + i * lh), line, font=font, fill=0)
+        d.text((MARGIN - b[0], i * lh), line, font=font, fill=0)
     return img
 
 def _rule():
@@ -138,9 +135,12 @@ def render_order_receipt(order):
     if rows: rows.append("")
     if order.get("orderNo"): rows.append("Order   " + str(order["orderNo"]))
     if order.get("date"): rows.append("Date    " + str(order["date"]))
-    if rows: sec.append(_box(rows, size=18))
+    if rows:
+        sec.append(_textblock(rows, size=18))
+        sec.append(_gap(6))
+        sec.append(_rule())
 
-    sec.append(_gap(16))
+    sec.append(_gap(8))
     sec.append(_block("IN THIS BOX", size=17))
     sec.append(_gap(8))
     for it in (order.get("items") or []):
