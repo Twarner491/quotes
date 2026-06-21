@@ -93,52 +93,52 @@ def _rule(width=CONTENT_W):
 def _gap(h=8):
     return Image.new("L", (WIDTH, h), 255)
 
-def _qr_img(url, px):
-    """A px-by-px 1-bit QR image, or None if qrcode isn't installed."""
+def _qr_img(url, target=200):
+    """A crisp 1-bit QR (~target px), or None if qrcode isn't installed. Rendered at a whole-pixel
+    module size with a proper quiet zone -- never downscaled, which is what muddled the old one."""
     try:
         import qrcode
     except Exception:
         return None
-    qr = qrcode.QRCode(border=1, box_size=10); qr.add_data(url); qr.make(fit=True)
-    return qr.make_image(fill_color="black", back_color="white").convert("L").resize((px, px), Image.Resampling.NEAREST)
+    qr = qrcode.QRCode(border=4, error_correction=qrcode.constants.ERROR_CORRECT_M)
+    qr.add_data(url); qr.make(fit=True)
+    modules = qr.modules_count + 2 * qr.border
+    qr.box_size = max(3, round(target / modules))   # whole px per module -> sharp + scannable
+    return qr.make_image(fill_color="black", back_color="white").convert("1")
 
 def _guide_row(project):
-    """One build-guide row: title + 'Build guide, video & docs' on the LEFT, a small QR on the RIGHT."""
-    QR = 116
-    gap = 14
-    leftw = CONTENT_W - QR - gap
+    """Build-guide block: title + 'Build guide, video & docs' + url, then a big crisp QR centered below."""
     parts = [
-        _block(project.get("title", ""), size=19, bold=True, width=leftw),
-        _block("Build guide, video & docs", size=13, width=leftw),
-        _block(project.get("url", ""), size=12, width=leftw),
+        _block(project.get("title", ""), size=22, bold=True),
+        _block("Build guide, video & docs", size=16),
+        _block(project.get("url", ""), size=13),
     ]
-    lh = sum(p.height for p in parts) + 2
-    left = Image.new("L", (leftw, lh), 255)
+    qr = _qr_img(project.get("url", ""), target=200)
+    gap = 12
+    text_h = sum(p.height for p in parts)
+    qh = (gap + qr.height) if qr is not None else 0
+    row = Image.new("L", (WIDTH, text_h + qh), 255)
     y = 0
-    for p in parts: left.paste(p, (0, y)); y += p.height
-    qr = _qr_img(project.get("url", ""), QR)
-    rowh = max(left.height, QR if qr else 0) + 6
-    row = Image.new("L", (WIDTH, rowh), 255)
-    row.paste(left, (MARGIN, (rowh - left.height) // 2))
+    for p in parts: row.paste(p, (MARGIN, y)); y += p.height
     if qr is not None:
-        row.paste(qr, (WIDTH - MARGIN - QR, (rowh - QR) // 2))
+        row.paste(qr, ((WIDTH - qr.width) // 2, y + gap))   # centered, full quiet zone
     return row
 
 def render_order_receipt(order):
     sec = []
-    sec.append(_gap(8))
-    sec.append(_block("theodore.net", size=34, bold=True, align="center"))
-    if order.get("orderNo"): sec.append(_block("Order " + str(order["orderNo"]), size=16, align="center"))
-    if order.get("date"): sec.append(_block(str(order["date"]), size=14, align="center"))
+    sec.append(_gap(10))
+    sec.append(_block("theodore.net", size=38, bold=True, align="center"))
+    if order.get("orderNo"): sec.append(_block("Order " + str(order["orderNo"]), size=19, align="center"))
+    if order.get("date"): sec.append(_block(str(order["date"]), size=16, align="center"))
     sec.append(_rule())
 
-    sec.append(_block("IN THIS BOX", size=13, bold=True))
-    sec.append(_gap(4))
+    sec.append(_block("IN THIS BOX", size=17, bold=True))
+    sec.append(_gap(6))
     for it in (order.get("items") or []):
-        sec.append(_block(it.get("name", ""), size=17, bold=True))
+        sec.append(_block(it.get("name", ""), size=24, bold=True))
         for c in (it.get("contents") or []):
-            sec.append(_block("·  " + c, size=15, indent=18))
-        sec.append(_gap(8))
+            sec.append(_block("·  " + c, size=20, indent=22))
+        sec.append(_gap(12))
 
     projects = order.get("projects") or []
     if projects:
@@ -161,8 +161,8 @@ if __name__ == "__main__":
         "orderNo": "1AVPRINT",
         "date": "June 21, 2026",
         "items": [
-            {"name": "Avian Visitors (+ Frame & Parts)", "contents": ["Everything in the Electronics Kit", "3D Printed backplate", "Oak wood frame and mat"]},
-            {"name": "Bird Mic (Electronics Kit)", "contents": ["Raspberry Pi 4", "USB microphone", "microSD card", "Power cable & brick"]},
+            {"name": "Avian Visitors (+ Frame & Parts)", "contents": ["Inky Impression 13.3\" display", "Raspberry Pi Zero 2 W", "microSD card", "40-pin header", "USB-C cable", "USB power brick", "3D printed backplate", "Oak frame & mat"]},
+            {"name": "Bird Mic (Electronics + 3D Printed)", "contents": ["Raspberry Pi 4", "USB microphone", "microSD card", "USB-C cable", "USB power brick", "3D printed case"]},
         ],
         "projects": [{"title": "Avian Visitors", "url": "https://theodore.net/projects/AvianVisitors/"}],
     }
