@@ -5,3 +5,4 @@ pillow
 flask-cors
 paho-mqtt
 numpy
+qrcode

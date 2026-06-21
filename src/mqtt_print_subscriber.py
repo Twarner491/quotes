@@ -14,6 +14,7 @@ import io
 import unicodedata
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 import numpy as np
+from order_receipt import render_order_receipt   # store packing-slip renderer (separate from quotes)
 
 # ============================================================================
 # CONFIGURATION
@@ -473,6 +474,26 @@ def print_quote(quote, author="Anonymous", image_base64=None):
         return False
 
 # ============================================================================
+# ORDER PACKING SLIP (theodore.net store)
+# ============================================================================
+def print_order(order):
+    """Print an in-the-box packing slip for a store order (rendered as one image, with a QR to the
+    project write-up). Separate from print_quote; the fun quote/note path is unchanged."""
+    try:
+        img = render_order_receipt(order)
+        p = Usb(VENDOR_ID, PRODUCT_ID, out_ep=OUT_EP, in_ep=IN_EP)
+        p.set(align='center')
+        p.image(img, impl="bitImageColumn")
+        p.text("\n")
+        p.cut()
+        p.close()
+        print(f"[OK] Printed packing slip for order {order.get('orderNo', '')}")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Order print error: {e}")
+        return False
+
+# ============================================================================
 # MQTT CALLBACKS
 # ============================================================================
 def on_connect(client, userdata, flags, rc, properties=None):
@@ -492,6 +513,18 @@ def on_disconnect(client, userdata, rc, properties=None):
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
+
+        # Store order packing slip (type:"order"), separate from the fun quote/note prints.
+        if payload.get("type") == "order":
+            paper_status, paper_label = check_paper(client)
+            if paper_status == 0:
+                print("[WARN] Out of paper, refusing to print order slip")
+                client.publish(MQTT_STATUS_TOPIC, json.dumps({"last_print": "refused", "reason": "out_of_paper", "paper": "out"}))
+                return
+            ok = print_order(payload)
+            client.publish(MQTT_STATUS_TOPIC, json.dumps({"last_print": "success" if ok else "failed", "order": payload.get("orderNo", ""), "paper": check_paper(client)[1]}))
+            return
+
         quote = payload.get("quote", "").strip()
         author = payload.get("author", "Anonymous").strip()
         image_base64 = payload.get("image")  # Optional base64 encoded image
