@@ -483,7 +483,7 @@ def print_order(order):
         img = render_order_receipt(order)
         p = Usb(VENDOR_ID, PRODUCT_ID, out_ep=OUT_EP, in_ep=IN_EP)
         p.set(align='center')
-        p.image(img, impl="bitImageColumn")
+        p.image(img, impl="bitImageRaster")   # GS v 0 raster: crispest for 1-bit text/line art
         p.text("\n")
         p.cut()
         p.close()
